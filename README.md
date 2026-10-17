@@ -1,20 +1,27 @@
-# HTML Viewer
+# little html viewer
 
-A tiny, mobile-friendly HTML file viewer for GitHub Pages.
+A small, mobile-first HTML viewer for GitHub Pages.
 
-Open a local `.html` or `.htm` file to preview its markup, styles, and scripts. The viewer reads files in your browser. The preview runs in a sandboxed iframe, separate from the viewer itself.
+## Personalize
+
+Change one line at the top of `app.js`:
+
+```js
+const HER_NAME = 'delilah';
+```
+
+The home screen shows `hi there delilah ❀` (with your chosen name).
 
 ## Deploy
 
-1. Upload the files in this folder to the root of a GitHub repository.
-2. Under **Settings > Pages**, select **Deploy from a branch**, then choose `main` and `/ (root)`.
-3. Open the GitHub Pages URL on your iPhone and tap **Open HTML**.
+1. Add all five files to the root of your GitHub repository.
+2. Go to **Settings → Pages → Deploy from a branch**.
+3. Select `main` and `/ (root)`, then save.
 
-No install, build step, framework, or external dependencies.
+No dependencies, builds, or accounts required.
 
-## Notes
+## Using it
 
-- CSS and JavaScript embedded in the HTML file work. Relative references to local files alongside the selected HTML file are not available through the browser's single-file picker.
-- Remote images, stylesheets, scripts, and other resources may request internet access. Preview only HTML you trust.
-- The iframe intentionally omits same-origin access. Some scripts that require local storage, cookies, or unrestricted browser permissions may not work.
-- Dark/light mode changes the viewer interface, not the opened document.
+Tap **upload html** to choose an `.html` or `.htm` file. Once the preview opens, the toolbar lets you choose another HTML file or enter/exit full screen. On iPhone Safari, full screen expands the preview to the available viewport; the browser's address bar may remain visible.
+
+Files are read locally in your browser. The preview is isolated in a sandboxed iframe. Inline CSS and JS work; local linked assets next to the HTML file can't be automatically read through this single-file picker. Remote linked resources may still access the internet, so open files you trust. Theme toggle affects the viewer, not the uploaded page.
