@@ -1,10 +1,10 @@
-const CACHE = 'little-viewer-v1.6.0';
+const CACHE = 'little-viewer-v1.6.1';
 const SHELL = [
   './',
   './index.html',
-  './assets/css/style.css?v=1.6.0',
-  './assets/js/app.js?v=1.6.0',
-  './assets/js/bridge.js?v=1.6.0',
+  './assets/css/style.css?v=1.6.1',
+  './assets/js/app.js?v=1.6.1',
+  './assets/js/bridge.js?v=1.6.1',
   './manifest.webmanifest',
   './assets/icons/code.svg',
   './assets/icons/touch-icon.png',
