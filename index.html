@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f5f0">
+  <meta name="description" content="Open and preview local HTML files on any device. No account or upload required.">
+  <meta name="color-scheme" content="light dark">
+  <title>HTML Viewer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233e574b'/%3E%3Cpath d='m25 21-11 11 11 11m14-22 11 11-11 11' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    try {
+      const saved = localStorage.getItem('html-viewer-theme');
+      document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    } catch {
+      document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+  </script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="identity" aria-label="HTML Viewer">
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none"><path d="m12 9-7 7 7 7m8-14 7 7-7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="wordmark">html viewer</span>
+      </div>
+      <div class="actions">
+        <button id="themeButton" class="theme-button" type="button" aria-label="Switch to dark mode" title="Toggle theme">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3.8" stroke="currentColor" stroke-width="1.7"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </button>
+        <button id="uploadButton" class="upload-button" type="button">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4.5 16.5v2.25c0 .69.56 1.25 1.25 1.25h12.5c.69 0 1.25-.56 1.25-1.25V16.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Open HTML</span>
+        </button>
+        <input id="fileInput" type="file" accept=".html,.htm,text/html" hidden>
+      </div>
+    </header>
+
+    <main class="workspace" aria-label="HTML preview workspace">
+      <div class="workspace-bar">
+        <span class="workspace-label">Preview</span>
+        <span id="fileName" class="file-name" aria-live="polite">No file selected</span>
+      </div>
+      <div class="canvas">
+        <div id="emptyState" class="empty-state">
+          <div class="file-symbol" aria-hidden="true">
+            <svg viewBox="0 0 64 76" fill="none"><path d="M11 2h27l18 18v49a5 5 0 0 1-5 5H11a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Z" stroke="currentColor" stroke-width="2.4"/><path d="M38 3v15a3 3 0 0 0 3 3h14M24 36l-8 8 8 8m16-16 8 8-8 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h1 id="emptyTitle">A blank page, for now.</h1>
+          <p id="emptyDescription">Open an HTML file to see it here.</p>
+        </div>
+        <iframe id="preview" title="Uploaded HTML preview" sandbox="allow-scripts" referrerpolicy="no-referrer" hidden></iframe>
+      </div>
+    </main>
+    <footer class="footer">
+      <span>Made for local HTML files.</span>
+      <span>HTML · CSS · JS</span>
+    </footer>
+  </div>
+</body>
+</html>
