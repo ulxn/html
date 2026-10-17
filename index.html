@@ -3,32 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f3f5f0">
-  <meta name="description" content="little viewer ❀ got an html file to open? here's a tiny cute viewer for opening your HTML files.">
+  <meta name="theme-color" content="#f0f5fc">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="hi there delilah ❀ here's little html viewer made exclusively just for you.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="little viewer ❀">
-  <meta property="og:description" content="got an html file to open? ❀">
-  <meta property="og:image" content="thumbnail.png">
-  <meta property="og:image:alt" content="little viewer ❀ preview card with a soft pastel design.">
+  <meta property="og:description" content="hi there delilah ❀ here's little html viewer made exclusively just for you.">
+  <meta property="og:image" content="./assets/images/thumbnail.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="hi there delilah ❀ — pastel blue little viewer card">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="little viewer ❀">
-  <meta name="twitter:description" content="got an html file to open? ❀">
-  <meta name="twitter:image" content="thumbnail.png">
-  <meta name="color-scheme" content="light dark">
+  <meta name="twitter:description" content="hi there delilah ❀ here's little html viewer made exclusively just for you.">
+  <meta name="twitter:image" content="./assets/images/thumbnail.jpg">
   <title>little viewer</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233e574b'/%3E%3Cpath d='m25 21-11 11 11 11m14-22 11 11-11 11' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="assets/icons/code.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icons/touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="assets/css/style.css?v=1.3.0">
   <script>
     try {
-      const saved = localStorage.getItem('html-viewer-theme');
-      document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
-        ? saved
-        : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      const theme = localStorage.getItem('little-viewer-theme');
+      document.documentElement.dataset.theme = theme === 'light' || theme === 'dark'
+        ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     } catch {
-      document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = 'light';
     }
   </script>
-  <script src="app.js" defer></script>
+  <script src="assets/js/app.js?v=1.3.0" defer></script>
 </head>
 <body>
   <div class="app">
@@ -39,17 +42,17 @@
         </span>
         <span class="wordmark">little viewer</span>
       </div>
-      <button id="themeButton" class="icon-button" type="button" aria-label="Switch theme" title="Toggle theme">
+      <button id="themeButton" class="icon-button" type="button" aria-label="Toggle color theme" title="Toggle color theme">
         <svg class="moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
         <svg class="sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3.8" stroke="currentColor" stroke-width="1.7"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
       </button>
     </header>
 
-    <main id="workspace" class="workspace" aria-label="HTML preview">
+    <main id="workspace" class="workspace" aria-label="HTML viewer">
       <div id="workspaceBar" class="workspace-bar" hidden>
-        <span id="fileName" class="file-name" aria-live="polite"></span>
+        <div class="file-details"><span id="fileName" class="file-name" aria-live="polite"></span><span id="saveStatus" class="save-status" role="status" aria-live="polite" hidden></span></div>
         <div class="preview-actions">
-          <button id="replaceButton" class="replace-button" type="button" aria-label="upload another HTML file" title="Upload another HTML file">
+          <button id="replaceButton" class="replace-button" type="button" aria-label="Upload another HTML file" title="Upload another HTML file">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4.5 16.5v2.25c0 .69.56 1.25 1.25 1.25h12.5c.69 0 1.25-.56 1.25-1.25V16.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span>upload html</span>
           </button>
@@ -62,18 +65,22 @@
       <div class="canvas">
         <div id="emptyState" class="empty-state">
           <h1 id="emptyTitle">hi there delilah ❀</h1>
-          <p id="emptyDescription">got an html file to open?</p>
+          <p id="emptyDescription" class="subtitle">here's little html viewer<br>made exclusively just for you.</p>
           <button id="uploadButton" class="upload-button" type="button">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4.5 16.5v2.25c0 .69.56 1.25 1.25 1.25h12.5c.69 0 1.25-.56 1.25-1.25V16.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span>upload html</span>
           </button>
-          <p class="little-wish">wishing you the very best outcome.</p>
+          <p class="little-wish">semoga lancar UPKP nya<br>semoga diberikan hasil yang terbaik (:</p>
         </div>
         <iframe id="preview" title="Uploaded HTML preview" sandbox="allow-scripts" referrerpolicy="no-referrer" hidden></iframe>
       </div>
     </main>
+
     <input id="fileInput" type="file" accept=".html,.htm,text/html" hidden>
-    <footer class="footer">a little corner of the internet</footer>
+    <footer class="footer">
+      <span>a little corner of the internet</span>
+      <span id="version" class="version">v1.3.0</span>
+    </footer>
   </div>
 </body>
 </html>
