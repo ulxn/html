@@ -1,5 +1,5 @@
-const APP_VERSION = '1.4.2';
-const HER_NAME = 'delilah'; // Change the nickname here.
+const APP_VERSION = '1.6.0';
+const HER_NAME = 'delilah'; // Change her nickname here.
 
 const $ = id => document.getElementById(id);
 const fileInput = $('fileInput');
@@ -24,8 +24,48 @@ themeButton.addEventListener('click', () => {
   const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = theme;
   updateTheme();
-  try { localStorage.setItem('little-viewer-theme', theme); } catch { /* Storage may be restricted. */ }
+  try { localStorage.setItem('little-viewer-theme', theme); } catch { /* Optional preference. */ }
 });
+
+// A tab has a short-lived sessionStorage pointer; file contents live in IndexedDB.
+// The pointer survives reload but normally disappears after the tab is closed.
+const TAB_KEY = 'little-viewer-tab-v160';
+const STATE_KEY = 'little-viewer-checkpoint-v160';
+const randomId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+const instanceId = randomId();
+let tabId = randomId();
+let sessionAvailable = false;
+try {
+  const stored = sessionStorage.getItem(TAB_KEY);
+  if (stored && /^[\w-]{8,90}$/.test(stored)) tabId = stored;
+  sessionStorage.setItem(TAB_KEY, tabId);
+  sessionAvailable = true;
+} catch { /* Private-mode restrictions: this tab cannot restore after reload. */ }
+
+// Duplicating a tab may clone sessionStorage. Detect another live tab with this
+// identifier and fork the new tab before restoring its saved HTML.
+const channel = 'BroadcastChannel' in window ? new BroadcastChannel('little-viewer-tabs-v160') : null;
+let forked = false;
+let initialized = false;
+if (channel) {
+  channel.addEventListener('message', event => {
+    const data = event.data;
+    if (!data || data.instanceId === instanceId) return;
+    if (data.type === 'probe' && data.tabId === tabId) {
+      channel.postMessage({ type: 'occupied', tabId, target: data.instanceId, instanceId });
+    } else if (data.type === 'occupied' && data.target === instanceId && data.tabId === tabId && !initialized) {
+      tabId = randomId();
+      forked = true;
+      if (sessionAvailable) {
+        try {
+          sessionStorage.setItem(TAB_KEY, tabId);
+          sessionStorage.removeItem(STATE_KEY);
+        } catch { /* Restoring remains best effort. */ }
+      }
+    }
+  });
+  channel.postMessage({ type: 'probe', tabId, instanceId });
+}
 
 const database = new Promise((resolve, reject) => {
   if (!('indexedDB' in window)) return reject(new Error('Storage unavailable'));
@@ -44,28 +84,14 @@ async function readSaved(key) {
     request.onerror = () => reject(request.error);
   });
 }
-
-async function saveFile(documentData) {
+async function writeFile(data) {
   const db = await database;
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction('files', 'readwrite');
-    const store = transaction.objectStore('files');
-    store.put(documentData, 'latest');
-    store.delete('view-state');
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error || new Error('Storage aborted'));
-  });
-}
-
-async function saveState(id, state) {
-  const db = await database;
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('files', 'readwrite');
-    transaction.objectStore('files').put({ id, state }, 'view-state');
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error || new Error('Storage aborted'));
+    const tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').put(data, `tab:${tabId}`);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Save interrupted'));
   });
 }
 
@@ -78,11 +104,8 @@ function setSaveStatus(message, warning = false) {
 let activeDocument = null;
 let bridgeToken = '';
 let fileRequest = 0;
-let safelyStored = false;
-let pendingState = null;
-let stateTimer = null;
-let stateWriting = Promise.resolve();
-let fileWriting = Promise.resolve();
+let saveWriting = Promise.resolve();
+let stored = false;
 
 function injectBridge(html, state, token) {
   const boot = JSON.stringify({ token, state: state || null }).replace(/</g, '\\u003c');
@@ -92,9 +115,8 @@ function injectBridge(html, state, token) {
   if (/<html\b[^>]*>/i.test(html)) return html.replace(/<html\b[^>]*>/i, match => match + '<head>' + script + '</head>');
   return html.replace(/^(<!doctype[^>]*>)?/i, match => match + '<head>' + script + '</head>');
 }
-
 function showFile(name, html, state = null) {
-  bridgeToken = crypto.randomUUID?.() || String(Date.now()) + Math.random();
+  bridgeToken = randomId();
   preview.srcdoc = injectBridge(html, state, bridgeToken);
   preview.hidden = false;
   emptyState.hidden = true;
@@ -103,88 +125,76 @@ function showFile(name, html, state = null) {
   $('fileName').title = name;
 }
 
-async function flushState() {
-  if (!pendingState || !safelyStored || !activeDocument) return;
-  const snapshot = pendingState;
-  const id = activeDocument.id;
-  pendingState = null;
-  stateWriting = stateWriting.catch(() => {}).then(() => saveState(id, snapshot));
+function readCheckpoint(id) {
   try {
-    await stateWriting;
-    if (activeDocument?.id === id) setSaveStatus('saved');
-  } catch {
-    if (activeDocument?.id === id) setSaveStatus('not saved', true);
-  }
+    const value = JSON.parse(sessionStorage.getItem(STATE_KEY) || 'null');
+    if (value?.id === id && value.state && typeof value.state === 'object') return value.state;
+  } catch { /* No saved state. */ }
+  return null;
+}
+function clearCheckpoint() {
+  try { sessionStorage.removeItem(STATE_KEY); } catch { /* Not available. */ }
 }
 
-function queueState(state) {
-  pendingState = state;
-  clearTimeout(stateTimer);
-  stateTimer = setTimeout(flushState, 120);
-}
-
+// The iframe is intentionally sandboxed: it cannot access this storage directly.
 window.addEventListener('message', event => {
-  if (event.source !== preview.contentWindow) return;
+  if (event.source !== preview.contentWindow || !activeDocument) return;
   const data = event.data;
-  if (data?.channel !== 'little-viewer-state' || data.token !== bridgeToken || !activeDocument) return;
+  if (data?.channel !== 'little-viewer-state' || data.token !== bridgeToken) return;
   try {
-    if (JSON.stringify(data.state).length > 96000) return;
     if (!data.state || typeof data.state !== 'object') return;
-    queueState(data.state);
-  } catch { /* Ignore malformed or oversized state. */ }
+    const payload = JSON.stringify({ id: activeDocument.id, state: data.state });
+    if (payload.length > 96000) return;
+    sessionStorage.setItem(STATE_KEY, payload);
+  } catch { /* Storage may be unavailable or full. */ }
 });
 
-// Persist checkpoints before iOS suspends the tab where possible.
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') { clearTimeout(stateTimer); void flushState(); }
-});
-window.addEventListener('pagehide', () => { clearTimeout(stateTimer); void flushState(); });
-
-// Old saved files from v1.3.0 have no id; they're still restorable.
-Promise.all([readSaved('latest'), readSaved('view-state')]).then(([saved, checkpoint]) => {
-  if (!saved?.name || typeof saved.html !== 'string' || fileRequest !== 0) return;
-  activeDocument = { ...saved, id: saved.id || 'legacy' };
-  safelyStored = true;
-  const restored = checkpoint?.id === activeDocument.id ? checkpoint.state : null;
-  showFile(saved.name, saved.html, restored);
-  setSaveStatus('saved');
-}).catch(() => { /* The viewer still works without IndexedDB. */ });
+// Unlike the old global "latest" record, only this tab's key is restored.
+// Wait briefly for another active tab to reject a copied session id.
+setTimeout(async () => {
+  initialized = true;
+  if (!sessionAvailable || forked || fileRequest) return;
+  try {
+    const data = await readSaved(`tab:${tabId}`);
+    if (!data?.name || typeof data.html !== 'string' || fileRequest) return;
+    activeDocument = data;
+    stored = true;
+    showFile(data.name, data.html, readCheckpoint(data.id));
+    setSaveStatus('saved in this tab');
+  } catch { /* Viewer's upload function still works without IndexedDB. */ }
+}, 220);
 
 const chooseFile = () => fileInput.click();
 $('uploadButton').addEventListener('click', chooseFile);
 $('replaceButton').addEventListener('click', chooseFile);
-
 fileInput.addEventListener('change', async () => {
   const file = fileInput.files?.[0];
   if (!file) return;
   fileInput.value = '';
   const request = ++fileRequest;
-
   if (!/\.html?$/i.test(file.name)) {
     showError('please choose an .html or .htm file.');
     return;
   }
-
   try {
     const html = await file.text();
     if (request !== fileRequest) return;
-    clearTimeout(stateTimer);
-    pendingState = null;
-    safelyStored = false;
-    const documentData = { id: crypto.randomUUID?.() || String(Date.now()) + Math.random(), name: file.name, html };
-    activeDocument = documentData;
+    clearCheckpoint();
+    stored = false;
+    const data = { id: randomId(), name: file.name, html, savedAt: Date.now() };
+    activeDocument = data;
     showFile(file.name, html);
     setSaveStatus('saving…');
     try {
-      await stateWriting.catch(() => {});
-      fileWriting = fileWriting.catch(() => {}).then(() => saveFile(documentData));
-      await fileWriting;
-      if (request !== fileRequest) return;
-      safelyStored = true;
-      setSaveStatus('saved');
-      if (pendingState) void flushState();
+      // Serialize writes within one tab. Distinct tabs use separate DB keys.
+      saveWriting = saveWriting.catch(() => {}).then(() => writeFile(data));
+      await saveWriting;
+      if (request === fileRequest && activeDocument?.id === data.id) {
+        stored = true;
+        setSaveStatus('saved in this tab');
+      }
     } catch {
-      if (request === fileRequest) setSaveStatus('not saved', true);
+      if (request === fileRequest) setSaveStatus('refresh won’t restore this file', true);
     }
   } catch {
     if (request === fileRequest) showError('this one wouldn’t open. mind trying another file?');
@@ -216,14 +226,12 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       const registration = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
       if (navigator.onLine) registration.update().catch(() => {});
       let refreshed = false;
-      navigator.serviceWorker.addEventListener('controllerchange', async () => {
-        if (hadController && !refreshed && (preview.hidden || safelyStored)) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController && !refreshed && (preview.hidden || stored)) {
           refreshed = true;
-          clearTimeout(stateTimer);
-          await flushState();
           location.reload();
         }
       });
-    } catch { /* Offline support is optional when service workers are blocked. */ }
+    } catch { /* Offline support is best effort. */ }
   });
 }

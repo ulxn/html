@@ -1,24 +1,35 @@
 # little viewer
 
-A tiny offline-ready HTML viewer. No framework, build step, analytics, external fonts, or server uploads.
+A tiny, offline-ready HTML file viewer for GitHub Pages. Vanilla HTML/CSS/JS, no framework, no build tools, no analytics, and no server-side file uploads.
+
+## What changed in v1.6.0
+
+The public HTML library from v1.5.0 is removed. Each browser tab now opens its **own local HTML file**:
+
+- **Tab A** can upload `quiz-a.html`; **Tab B** can upload `quiz-b.html`.
+- **Refresh the same tab:** its HTML file and compatible quiz progress return.
+- **Close the tab and open a new one:** the new tab starts on the welcome/upload screen.
+- **Duplicate an existing tab:** a `BroadcastChannel` check tries to give the duplicate a fresh session, instead of sharing the original's file.
+
+The page uses `sessionStorage` for that tab's identity and progress. The HTML file itself is stored in IndexedDB under the tab's identity, because HTML can be larger than `sessionStorage` limits. Old IndexedDB records can persist after a tab closes, but **new tabs don't restore them**. Browsers can sometimes restore a previously closed tab and its session data; in that case, its progress may also return. Completely clearing Safari website data removes saved files. Safari may evict them when storage is low.
+
+**When updating from v1.4.x or v1.5.0**, re-upload the HTML file in each tab once. The older global `latest` record is intentionally not restored so separate tabs can't accidentally overwrite each other.
 
 ## Deploy
 
-Deploy the files so they are publicly served at **`https://ulxn.github.io/html/`**. If your repository is `ulxn.github.io`, copy all files into its `/html/` directory. If your repository is a separate project named `html`, copy files into that repository’s root. In **Settings → Pages**, use your existing deployment setup. Open the deployed HTTPS page online once to install its offline cache.
+Publish the contents of this ZIP to the site at `https://ulxn.github.io/html/` (do not nest an additional folder inside the deployed `/html/` path). Keep `index.html`, `sw.js`, `manifest.webmanifest`, `.gitignore`, and `README.md` at the deployment root. All assets are in `assets/`.
 
-## Resume after refresh
+- The `< >` logo and favicon are unchanged.
+- Pastel-blue light/dark mode and fullscreen are preserved.
+- The WhatsApp metadata remains from v1.5.0: title **little viewer**, description **here's little html viewer made exclusively just for you.**, and a light JPEG preview at `assets/images/thumbnail-share-v1.5.0.jpg` (not displayed in the app).
+- Change the greeting with `HER_NAME` at the top of `assets/js/app.js`.
+- Footer displays **v1.6.0**.
 
-Little Viewer stores the last imported HTML file and its progress locally in **IndexedDB** in the same browser.
+## Quiz-state compatibility
 
-- Quizzes that use `localStorage` or `sessionStorage` can restore their own progress using a sandbox-compatible storage bridge.
-- Simple quizzes with **Next / Back / Start** buttons can often restore their last question by replaying saved navigation and answer selections.
-- It also remembers ordinary form fields and the page's scroll position where possible.
+Some quizzes with localStorage/sessionStorage or straightforward **Next / Back** actions can resume after refresh. Other quizzes maintain the active question only in private JavaScript variables and might restart from question 1. This is best-effort, not a universal snapshot of an HTML app.
 
-This is **best effort**, not universal. Arbitrary JavaScript variables, custom SPA/router state, dynamically generated content, games, timed tests, remote data, page redirects, and some complex quiz widgets cannot be reconstructed reliably. Replay may also rerun a quiz's own button handlers. For full reliability, add persistence to the quiz itself (see below). Imported files are still isolated in a `sandbox="allow-scripts"` iframe without same-origin access.
-
-### Reliable custom quiz state (optional)
-
-When editing the imported quiz's code, save its state whenever the active question or answers change, then restore it on startup:
+For reliable resume of a quiz you can edit, have it explicitly save progress using the injected API:
 
 ```js
 const saved = window.littleViewer?.load();
@@ -27,44 +38,14 @@ if (saved) {
   answers = saved.answers;
   renderQuestion();
 }
-
-// Call after each quiz state change.
+// Call whenever a question/answer changes:
 window.littleViewer?.save({ currentQuestion, answers });
 ```
 
-This opt-in hook is helpful for quizzes that store progress only in JavaScript variables. It stores JSON-serializable data, capped at 32 KB.
+The quiz runs in a sandboxed iframe. It cannot access the parent app's storage directly. Imported HTML with external assets may need connectivity, and its dependencies aren't automatically bundled by the viewer. Open only trusted HTML files.
 
-## Privacy & limitations
+## Offline and updates
 
-All saved HTML and progress remain in local browser storage. They aren't synced between devices or browser profiles. Browsing in private mode, clearing website data, or iOS storage eviction can erase saved progress. Keep the original HTML file as a backup. HTML files can still load external URLs if the file's own code asks for them; open only trusted HTML. Sidecar CSS/JS/images next to an imported HTML file are not imported by the single-file picker.
+The app shell is cached after the first online visit. Uploaded inline HTML files are available offline in the same tab after they have been saved. Online requests use a network-first service worker and cache fallback. Reload when the new release is live to activate the service worker. Site storage may be removed by the browser.
 
-Fullscreen fills the page's viewport (no native browser tip). iPhone Safari's own toolbars may remain visible.
-
-## Customize / versioning
-
-- Rename the greeting via `HER_NAME` in `assets/js/app.js`.
-- The WhatsApp-only share preview is `assets/images/thumbnail-share-v1.4.2.jpg`, referenced by full HTTPS URL in the HTML metadata.
-- On each release, update `APP_VERSION` in `app.js`, `?v=` in `index.html`, footer fallback, and the cache name + assets in `sw.js`. Updated assets are fetched network-first while online and cached for offline use.
-
-Current version: **1.4.2**.
-
-## WhatsApp link preview
-
-The WhatsApp thumbnail is a **baseline JPEG, 1200×630 px, under 100 KB**, at `assets/images/thumbnail-share-v1.4.2.jpg`. It is never used as the app's background or loaded in the viewer UI.
-
-Social crawlers need **actual absolute URLs in the HTML source**. `index.html` now explicitly contains:
-
-```
-<meta property="og:url" content="https://ulxn.github.io/html/">
-<meta property="og:image" content="https://ulxn.github.io/html/assets/images/thumbnail-share-v1.4.2.jpg">
-```
-
-The same URL is set for `og:image:secure_url` and `twitter:image`. No Jekyll processing is required; deploy normally, including GitHub Pages from a branch or Actions.
-
-**Deployment for this project:** place these files at the public `/html/` directory of the site, so the homepage is `https://ulxn.github.io/html/`. If the site's public URL changes later, update the OG absolute URLs too.
-
-After publishing, check that opening `https://ulxn.github.io/html/assets/images/thumbnail-share-v1.4.2.jpg` directly displays the image. Then share `https://ulxn.github.io/html/?v=142` once to nudge WhatsApp to fetch a fresh preview if it previously cached the URL. A preview depends on WhatsApp's crawler and link-preview settings, so it cannot be guaranteed even with correct metadata.
-
----
-
-**Release:** v1.4.2 · OG URL + baseline JPEG + SW cache-busting only. Quiz progress and local saved files remain compatible with v1.4.1.
+This project was checked with JavaScript syntax validation and simulated multi-tab/reload cases; a full iPhone Safari run and live PageSpeed audit have **not** been performed. A perfect PageSpeed score can't be guaranteed before testing the deployed URL.
