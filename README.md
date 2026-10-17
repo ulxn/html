@@ -4,7 +4,7 @@ A tiny offline-ready HTML viewer. No framework, build step, analytics, external 
 
 ## Deploy
 
-Put the contents of the ZIP at your GitHub repo root. In **Settings → Pages**, choose **Deploy from a branch → main → / (root)**. Open the deployed HTTPS page online once to install its offline cache.
+Deploy the files so they are publicly served at **`https://ulxn.github.io/html/`**. If your repository is `ulxn.github.io`, copy all files into its `/html/` directory. If your repository is a separate project named `html`, copy files into that repository’s root. In **Settings → Pages**, use your existing deployment setup. Open the deployed HTTPS page online once to install its offline cache.
 
 ## Resume after refresh
 
@@ -43,18 +43,28 @@ Fullscreen fills the page's viewport (no native browser tip). iPhone Safari's ow
 ## Customize / versioning
 
 - Rename the greeting via `HER_NAME` in `assets/js/app.js`.
-- The WhatsApp-only share preview is `assets/images/thumbnail-share-v1.4.1.jpg`. For reliable previews, use a full HTTPS URL in `og:image` / `twitter:image` on the deployed domain.
+- The WhatsApp-only share preview is `assets/images/thumbnail-share-v1.4.2.jpg`, referenced by full HTTPS URL in the HTML metadata.
 - On each release, update `APP_VERSION` in `app.js`, `?v=` in `index.html`, footer fallback, and the cache name + assets in `sw.js`. Updated assets are fetched network-first while online and cached for offline use.
 
-Current version: **1.4.1**.
+Current version: **1.4.2**.
 
 ## WhatsApp link preview
 
-The share image is `assets/images/thumbnail-share-v1.4.1.jpg` (JPEG, 1200×630, about 55 KB). It is **not loaded by the viewer page**, only by chat/social crawlers.
+The WhatsApp thumbnail is a **baseline JPEG, 1200×630 px, under 100 KB**, at `assets/images/thumbnail-share-v1.4.2.jpg`. It is never used as the app's background or loaded in the viewer UI.
 
-The first 3 lines of `index.html` enable GitHub Pages' default Jekyll build (no JS runtime overhead). On a **Deploy from branch** GitHub Pages site, the `{{ site.github.url }}` template renders to the site's **absolute public HTTPS URL**, so `og:image`, `og:image:secure_url`, `og:url`, and `twitter:image` are crawlable on project pages and custom domains.
+Social crawlers need **actual absolute URLs in the HTML source**. `index.html` now explicitly contains:
 
-**Important:** Keep those three front-matter lines, and do **not** add a `.nojekyll` file. If you use a GitHub Actions or another host that serves `index.html` without Jekyll processing, replace each `{{ site.github.url | replace: 'http://', 'https://' }}` with your real published base URL including the project path (without a trailing slash). No browser-side JavaScript can fix social metadata for crawlers.
+```
+<meta property="og:url" content="https://ulxn.github.io/html/">
+<meta property="og:image" content="https://ulxn.github.io/html/assets/images/thumbnail-share-v1.4.2.jpg">
+```
 
-After publishing, visit the image's public URL directly and check the **View source** of the live page: `og:image` must be a complete `https://...jpg` URL, not contain `{{ ... }}`. Share your *published GitHub Pages URL* rather than your `github.com` repository link. WhatsApp may cache an old unfurl; testing with a new image filename and a fresh link can help.
+The same URL is set for `og:image:secure_url` and `twitter:image`. No Jekyll processing is required; deploy normally, including GitHub Pages from a branch or Actions.
 
+**Deployment for this project:** place these files at the public `/html/` directory of the site, so the homepage is `https://ulxn.github.io/html/`. If the site's public URL changes later, update the OG absolute URLs too.
+
+After publishing, check that opening `https://ulxn.github.io/html/assets/images/thumbnail-share-v1.4.2.jpg` directly displays the image. Then share `https://ulxn.github.io/html/?v=142` once to nudge WhatsApp to fetch a fresh preview if it previously cached the URL. A preview depends on WhatsApp's crawler and link-preview settings, so it cannot be guaranteed even with correct metadata.
+
+---
+
+**Release:** v1.4.2 · OG URL + baseline JPEG + SW cache-busting only. Quiz progress and local saved files remain compatible with v1.4.1.

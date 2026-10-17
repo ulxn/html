@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.4.2';
 const HER_NAME = 'delilah'; // Change the nickname here.
 
 const $ = id => document.getElementById(id);
