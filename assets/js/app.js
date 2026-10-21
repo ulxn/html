@@ -1,4 +1,4 @@
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.6.2';
 const HER_NAME = 'delilah'; // Change her nickname here.
 
 const $ = id => document.getElementById(id);
@@ -27,20 +27,36 @@ themeButton.addEventListener('click', () => {
   try { localStorage.setItem('little-viewer-theme', theme); } catch { /* Optional preference. */ }
 });
 
-// A tab has a short-lived sessionStorage pointer; file contents live in IndexedDB.
-// The pointer survives reload but normally disappears after the tab is closed.
+// Safari can discard a background tab and reload it without its sessionStorage.
+// Keep independent copies of this tab's identity in its history entry and
+// browsing-context name. A genuinely new tab still starts with a new ID.
 const TAB_KEY = 'little-viewer-tab-v160';
 const STATE_KEY = 'little-viewer-checkpoint-v160';
+const HISTORY_KEY = '__littleViewerTab';
+const WINDOW_PREFIX = 'little-viewer-tab:';
 const randomId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+const validId = id => typeof id === 'string' && /^[\w-]{8,90}$/.test(id);
 const instanceId = randomId();
-let tabId = randomId();
-let sessionAvailable = false;
+let storedTab = null;
+try { storedTab = sessionStorage.getItem(TAB_KEY); } catch { /* Session may be unavailable. */ }
+let historyTab = null;
+try { historyTab = history.state?.[HISTORY_KEY]; } catch { /* No history state. */ }
+let namedTab = null;
 try {
-  const stored = sessionStorage.getItem(TAB_KEY);
-  if (stored && /^[\w-]{8,90}$/.test(stored)) tabId = stored;
-  sessionStorage.setItem(TAB_KEY, tabId);
-  sessionAvailable = true;
-} catch { /* Private-mode restrictions: this tab cannot restore after reload. */ }
+  if (window.name.startsWith(WINDOW_PREFIX)) namedTab = window.name.slice(WINDOW_PREFIX.length);
+} catch { /* Browsing context name is optional. */ }
+let tabId = [storedTab, historyTab, namedTab].find(validId) || randomId();
+let identityAvailable = false;
+function rememberTabId() {
+  try { sessionStorage.setItem(TAB_KEY, tabId); identityAvailable = true; } catch { /* Optional. */ }
+  try {
+    const state = history.state && typeof history.state === 'object' ? history.state : {};
+    history.replaceState({ ...state, [HISTORY_KEY]: tabId }, '');
+    identityAvailable = true;
+  } catch { /* Optional. */ }
+  try { window.name = WINDOW_PREFIX + tabId; identityAvailable = true; } catch { /* Optional. */ }
+}
+rememberTabId();
 
 // Duplicating a tab may clone sessionStorage. Detect another live tab with this
 // identifier and fork the new tab before restoring its saved HTML.
@@ -56,12 +72,8 @@ if (channel) {
     } else if (data.type === 'occupied' && data.target === instanceId && data.tabId === tabId && !initialized) {
       tabId = randomId();
       forked = true;
-      if (sessionAvailable) {
-        try {
-          sessionStorage.setItem(TAB_KEY, tabId);
-          sessionStorage.removeItem(STATE_KEY);
-        } catch { /* Restoring remains best effort. */ }
-      }
+      rememberTabId();
+      try { sessionStorage.removeItem(STATE_KEY); } catch { /* Optional. */ }
     }
   });
   channel.postMessage({ type: 'probe', tabId, instanceId });
@@ -101,11 +113,69 @@ function setSaveStatus(message, warning = false) {
   saveStatus.classList.toggle('warning', warning);
 }
 
+// Keep a durable per-tab checkpoint alongside the original uploaded HTML.
+// sessionStorage remains the fastest path, while IndexedDB survives typical
+// Safari background eviction even when sessionStorage does not.
+function flushCheckpoint() {
+  clearTimeout(checkpointTimer);
+  checkpointTimer = 0;
+  if (!activeDocument?.checkpoint) return;
+  const snapshot = { ...activeDocument };
+  saveWriting = saveWriting.catch(() => {}).then(() => writeFile(snapshot));
+  saveWriting.catch(() => setSaveStatus('couldn’t save progress', true));
+}
+function queueCheckpoint() {
+  clearTimeout(checkpointTimer);
+  checkpointTimer = setTimeout(flushCheckpoint, 150);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && checkpointTimer) flushCheckpoint();
+});
+window.addEventListener('pagehide', () => {
+  if (checkpointTimer) flushCheckpoint();
+});
+
+async function showRecoverOption() {
+  if (activeDocument || fileRequest || !recoverButton) return;
+  try {
+    const db = await database;
+    const records = await new Promise((resolve, reject) => {
+      const req = db.transaction('files', 'readonly').objectStore('files').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const latest = records.filter(r => r?.name && typeof r.html === 'string')
+      .sort((a, b) => (b.lastActiveAt || b.savedAt || 0) - (a.lastActiveAt || a.savedAt || 0))[0];
+    if (!latest || activeDocument || fileRequest) return;
+    recoverButton.hidden = false;
+    recoverButton.textContent = `restore ${latest.name}`;
+    recoverButton.title = `Recover ${latest.name} and its saved progress`;
+    recoverButton.addEventListener('click', async () => {
+      // Clone into this tab's unique key so recovery never overwrites another tab.
+      if (activeDocument) return;
+      const recovered = { ...latest, id: randomId(), savedAt: Date.now() };
+      activeDocument = recovered;
+      clearCheckpoint();
+      showFile(recovered.name, recovered.html, recovered.checkpoint || null);
+      recoverButton.hidden = true;
+      setSaveStatus('saving…');
+      try {
+        saveWriting = saveWriting.catch(() => {}).then(() => writeFile(recovered));
+        await saveWriting;
+        stored = true;
+        setSaveStatus('saved in this tab');
+      } catch { setSaveStatus('refresh may not restore this file', true); }
+    }, { once: true });
+  } catch { /* No recoverable file, or storage is unavailable. */ }
+}
+
 let activeDocument = null;
 let bridgeToken = '';
 let fileRequest = 0;
 let saveWriting = Promise.resolve();
 let stored = false;
+let checkpointTimer = 0;
+const recoverButton = $('recoverButton');
 
 function injectBridge(html, state, token) {
   const boot = JSON.stringify({ token, state: state || null }).replace(/</g, '\\u003c');
@@ -145,23 +215,29 @@ window.addEventListener('message', event => {
     if (!data.state || typeof data.state !== 'object') return;
     const payload = JSON.stringify({ id: activeDocument.id, state: data.state });
     if (payload.length > 96000) return;
-    sessionStorage.setItem(STATE_KEY, payload);
-  } catch { /* Storage may be unavailable or full. */ }
+    activeDocument.checkpoint = data.state;
+    activeDocument.lastActiveAt = Date.now();
+    try { sessionStorage.setItem(STATE_KEY, payload); } catch { /* IndexedDB still saves. */ }
+    queueCheckpoint();
+  } catch { /* Ignore oversized or non-serializable state. */ }
 });
 
 // Unlike the old global "latest" record, only this tab's key is restored.
 // Wait briefly for another active tab to reject a copied session id.
 setTimeout(async () => {
   initialized = true;
-  if (!sessionAvailable || forked || fileRequest) return;
+  if (forked || fileRequest) { if (forked) showRecoverOption(); return; }
   try {
-    const data = await readSaved(`tab:${tabId}`);
-    if (!data?.name || typeof data.html !== 'string' || fileRequest) return;
+    const data = identityAvailable ? await readSaved(`tab:${tabId}`) : null;
+    if (!data?.name || typeof data.html !== 'string' || fileRequest) {
+      showRecoverOption();
+      return;
+    }
     activeDocument = data;
     stored = true;
-    showFile(data.name, data.html, readCheckpoint(data.id));
+    showFile(data.name, data.html, readCheckpoint(data.id) || data.checkpoint || null);
     setSaveStatus('saved in this tab');
-  } catch { /* Viewer's upload function still works without IndexedDB. */ }
+  } catch { showRecoverOption(); }
 }, 220);
 
 const chooseFile = () => fileInput.click();
@@ -180,6 +256,8 @@ fileInput.addEventListener('change', async () => {
     const html = await file.text();
     if (request !== fileRequest) return;
     clearCheckpoint();
+    clearTimeout(checkpointTimer);
+    recoverButton.hidden = true;
     stored = false;
     const data = { id: randomId(), name: file.name, html, savedAt: Date.now() };
     activeDocument = data;
@@ -191,6 +269,7 @@ fileInput.addEventListener('change', async () => {
       await saveWriting;
       if (request === fileRequest && activeDocument?.id === data.id) {
         stored = true;
+        if (activeDocument.checkpoint) queueCheckpoint();
         setSaveStatus('saved in this tab');
       }
     } catch {
@@ -221,17 +300,11 @@ document.addEventListener('keydown', event => {
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', async () => {
-    const hadController = Boolean(navigator.serviceWorker.controller);
     try {
       const registration = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
       if (navigator.onLine) registration.update().catch(() => {});
-      let refreshed = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (hadController && !refreshed && (preview.hidden || stored)) {
-          refreshed = true;
-          location.reload();
-        }
-      });
+      // Never force-reload an open quiz when a newer service worker activates.
+      // Network-first navigation loads updates on the user's next visit/reload.
     } catch { /* Offline support is best effort. */ }
   });
 }

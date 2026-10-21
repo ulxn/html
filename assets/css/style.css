@@ -171,3 +171,18 @@ h1 {
 @media (prefers-reduced-motion: no-preference) {
   .icon-button, .replace-button, .upload-button { transition: background-color .15s ease, filter .15s ease; }
 }
+
+/* Hidden unless a previous local file can be recovered. */
+.recover-button {
+  border: 0;
+  padding: 7px 12px;
+  margin-top: 12px;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.recover-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }

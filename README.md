@@ -2,7 +2,23 @@
 
 A tiny, offline-ready HTML file viewer for GitHub Pages. Vanilla HTML/CSS/JS, no framework, no build tools, no analytics, and no server-side file uploads.
 
-## What changed in v1.6.1
+## What changed in v1.6.2
+
+- Safari sometimes reloads a dormant tab without its original sessionStorage.
+  Little Viewer now remembers each tab using **three independent hints**:
+  sessionStorage, history.state, and window.name. It restores saved files from
+  IndexedDB using whichever identifier survives.
+- Quiz checkpoints are now also saved to **IndexedDB** (debounced), so losing
+  sessionStorage doesn't automatically erase previously saved quiz answers.
+- The service worker can update without *forcibly reloading the open quiz*.
+- If a browser has lost all tab identifiers, the welcome screen offers a subtle
+  **restore previous file** option when a local backup is available. This clones
+  the file and checkpoint into a new independent tab; it doesn't overwrite other tabs.
+- A **new tab still starts blank**. Browser storage eviction, clearing Safari data,
+  and private browsing can remove backups; no pure web app can prevent that.
+
+## Prior behavior
+
 
 The public HTML library from v1.5.0 is removed. Each browser tab now opens its **own local HTML file**:
 
@@ -11,7 +27,7 @@ The public HTML library from v1.5.0 is removed. Each browser tab now opens its *
 - **Close the tab and open a new one:** the new tab starts on the welcome/upload screen.
 - **Duplicate an existing tab:** a `BroadcastChannel` check tries to give the duplicate a fresh session, instead of sharing the original's file.
 
-The page uses `sessionStorage` for that tab's identity and progress. The HTML file itself is stored in IndexedDB under the tab's identity, because HTML can be larger than `sessionStorage` limits. Old IndexedDB records can persist after a tab closes, but **new tabs don't restore them**. Browsers can sometimes restore a previously closed tab and its session data; in that case, its progress may also return. Completely clearing Safari website data removes saved files. Safari may evict them when storage is low.
+The page uses tab-scoped pointers for identity; HTML and compatible quiz checkpoints are saved in IndexedDB under that tab's identity. `sessionStorage` provides a fast checkpoint, with a durable copy in IndexedDB. Old IndexedDB records can persist after a tab closes, but **new tabs don't restore them**. Browsers can sometimes restore a previously closed tab and its session data; in that case, its progress may also return. Completely clearing Safari website data removes saved files. Safari may evict them when storage is low.
 
 **When updating from v1.4.x or v1.5.0**, re-upload the HTML file in each tab once. The older global `latest` record is intentionally not restored so separate tabs can't accidentally overwrite each other.
 
@@ -23,11 +39,11 @@ Publish the contents of this ZIP to the site at `https://ulxn.github.io/html/` (
 - Pastel-blue light/dark mode and fullscreen are preserved.
 - The WhatsApp metadata remains from v1.5.0: title **little viewer**, description **here's little html viewer made exclusively just for you.**, and a light JPEG preview at `assets/images/thumbnail-share-v1.5.0.jpg` (not displayed in the app).
 - Change the greeting with `HER_NAME` at the top of `assets/js/app.js`.
-- Footer displays **v1.6.1**.
+- Footer displays **v1.6.2**.
 
 ## Quiz-state compatibility
 
-**New in v1.6.1:** The bridge now understands quizzes using `#options-container`, `#quick-nav`, and `#badge-num` (including both provided TPA quizzes). It saves **the selected answers, active question, category filter, and instant-answer mode** on each action and restores them after refresh. Original quiz files do not need edits. This is not a generic snapshot of every JavaScript application; quizzes with different markup or internal state may still need custom integration. Progress never saved in previous versions cannot be recovered.
+**New in v1.6.2:** The bridge now understands quizzes using `#options-container`, `#quick-nav`, and `#badge-num` (including both provided TPA quizzes). It saves **the selected answers, active question, category filter, and instant-answer mode** on each action and restores them after refresh. Original quiz files do not need edits. This is not a generic snapshot of every JavaScript application; quizzes with different markup or internal state may still need custom integration. Progress never saved in previous versions cannot be recovered.
 
 For reliable resume of a quiz you can edit, have it explicitly save progress using the injected API:
 
